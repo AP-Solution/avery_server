@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Place Your Order</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .form-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #status-message {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .error {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+        .items-container {
+            margin-bottom: 15px;
+        }
+        .item {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .item input {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <h2>Place Your Order</h2>
+        <form id="order-form">
+            <div class="form-group">
+                <label for="name">Name:</label>
+                <input type="text" id="name" required>
+            </div>
+            <div class="form-group">
+                <label for="phone">Phone:</label>
+                <input type="tel" id="phone" required>
+            </div>
+            <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" id="email" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Items:</label>
+                <div id="items-container" class="items-container">
+                    <div class="item">
+                        <input type="text" placeholder="Item name" required>
+                        <input type="number" placeholder="Price" step="0.01" required>
+                    </div>
+                </div>
+                <button type="button" onclick="addItem()">Add Item</button>
+            </div>
+
+            <div class="form-group">
+                <label for="notes">Additional Notes:</label>
+                <textarea id="notes" rows="4"></textarea>
+            </div>
+
+            <button type="submit">Place Order</button>
+        </form>
+        <div id="status-message"></div>
+    </div>
+
+    <script>
+        function addItem() {
+            const container = document.getElementById('items-container');
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'item';
+            itemDiv.innerHTML = `
+                <input type="text" placeholder="Item name" required>
+                <input type="number" placeholder="Price" step="0.01" required>
+                <button type="button" onclick="this.parentElement.remove()">Remove</button>
+            `;
+            container.appendChild(itemDiv);
+        }
+
+        document.getElementById('order-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const statusMessage = document.getElementById('status-message');
+            const items = [];
+            let total = 0;
+
+            // Collect items
+            document.querySelectorAll('.item').forEach(item => {
+                const name = item.querySelector('input[type="text"]').value;
+                const price = parseFloat(item.querySelector('input[type="number"]').value);
+                items.push({ name, price });
+                total += price;
+            });
+
+            const orderData = {
+                name: document.getElementById('name').value,
+                phone: document.getElementById('phone').value,
+                email: document.getElementById('email').value,
+                items: items,
+                total: total.toFixed(2),
+                notes: document.getElementById('notes').value
+            };
+
+            try {
+                const response = await fetch('http://localhost:4242/new-order', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(orderData)
+                });
+
+                const data = await response.json();
+                
+                statusMessage.style.display = 'block';
+                if (data.success) {
+                    statusMessage.className = 'success';
+                    statusMessage.textContent = 'Order placed successfully!';
+                    e.target.reset();
+                    document.getElementById('items-container').innerHTML = `
+                        <div class="item">
+                            <input type="text" placeholder="Item name" required>
+                            <input type="number" placeholder="Price" step="0.01" required>
+                        </div>
+                    `;
+                } else {
+                    statusMessage.className = 'error';
+                    statusMessage.textContent = data.message;
+                }
+            } catch (error) {
+                statusMessage.style.display = 'block';
+                statusMessage.className = 'error';
+                statusMessage.textContent = 'Error submitting order. Please try again.';
+            }
+        });
+    </script>
+</body>
+</html>
