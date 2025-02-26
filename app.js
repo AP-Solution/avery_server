@@ -8,15 +8,17 @@ const path = require('path');
 const app = express();
 const port = process.env.PORT || 4242;
 
-// CORS configuration
-const corsOptions = {
-    origin: 'https://avery.com.ua',
-    methods: ['GET'],
-    optionsSuccessStatus: 200
-};
-
 // Middleware
-app.use(cors(corsOptions));
+const cors = require('cors');
+
+app.use(cors({
+    origin: ['http://localhost:3000', 'https://avery.com.ua'], 
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], 
+    allowedHeaders: ['Content-Type', 'Authorization'], 
+    credentials: true 
+}));
+
+app.use(express.json());
 app.use(express.static('public'));
 
 // Telegram bot configuration
@@ -72,7 +74,7 @@ async function saveMessage(message, isOrder = false) {
         });
 
         await fs.writeFile(filePath, JSON.stringify(items, null, 2));
-        
+
         // Forward to admin
         await bot.sendMessage(userId, `
 New ${isOrder ? 'order' : 'message'} received:
@@ -121,15 +123,15 @@ bot.on('message', async (msg) => {
         } else {
             // Check if the message is an order
             const isOrder = msg.text.startsWith('🌸 Нове замовлення!');
-            
+
             // Save message to appropriate file and forward to admin
             await saveMessage(msg, isOrder);
-            
+
             // Send appropriate confirmation to user
             if (isOrder) {
-                await bot.sendMessage(msg.chat.id, 'Ваше замовлення вдало отримано! Найближчим часом вам відповість наш подарунковий спеціаліст 🎀');
+                await bot.sendMessage(msg.chat.id, '🌸 Ваше замовлення вдало отримано! Найближчим часом вам відповість наш подарунковий спеціаліст 🎀');
             } else {
-                await bot.sendMessage(msg.chat.id, 'Дякуємо за ваше повідомлення! Ми отримали його та скоро відповімо. 🌟');
+                await bot.sendMessage(msg.chat.id, '🌟 Дякуємо за ваше повідомлення! Ми отримали його та скоро відповімо.');
             }
         }
     } catch (error) {
@@ -140,6 +142,72 @@ bot.on('message', async (msg) => {
 // Serve static files
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Handle new orders from website
+app.post('/new-order', async (req, res) => {
+    try {
+        const { customerInfo, order } = req.body;
+
+        // Log items array to debug undefined issue
+        console.log('Order items:', JSON.stringify(order.items, null, 2));
+
+        // Format the message
+        const message = `🌸 Нове замовлення!\n\n` +
+            `👤 Ім'я: ${customerInfo.name}\n` +
+            `📞 Телефон: ${customerInfo.phone}\n` +
+            `📍 Адреса: ${customerInfo.address}\n` +
+            `🕒 Час доставки: ${customerInfo.deliveryTime}\n` +
+            `💳 Спосіб оплати: ${customerInfo.paymentMethod === 'card' ? 'Карткою' : 'Готівкою'}\n` +
+            `💭 Коментар: ${customerInfo.comment || 'Немає'}\n\n` +
+            `🛍️ Замовлення:\n` +
+            `${order.items.map(item => {
+                return `${item.title || item.name} - ${item.quantity}шт. x ${item.price}грн.`;
+            }).join('\n')}\n\n` +
+            `💰 Загальна сума: ${order.totalAmount}грн.`;
+
+        // Log the formatted message to console
+        console.log('\n=== New Order ===');
+        console.log(message);
+        console.log('================\n');
+
+        // Create order object in the required format
+        const orderObject = {
+            userId: null,
+            username: null,
+            firstName: null,
+            lastName: null,
+            message: message,
+            timestamp: new Date().toISOString()
+        };
+
+        // Read and update orders.json
+        let orders = [];
+        try {
+            const fileContent = await fs.readFile(ordersFilePath, 'utf8');
+            orders = JSON.parse(fileContent);
+        } catch (error) {
+            console.error('Error reading orders.json:', error);
+            if (error.code === 'ENOENT') {
+                orders = [];
+            } else {
+                throw error;
+            }
+        }
+
+        orders.push(orderObject);
+        await fs.writeFile(ordersFilePath, JSON.stringify(orders, null, 2));
+
+        // Send notification to admin
+        const adminMessage = `${message}`;
+        await bot.sendMessage(userId, adminMessage);
+
+        console.log('Order processed successfully');
+        res.status(200).json({ success: true, message: 'Order received successfully' });
+    } catch (error) {
+        console.error('Error processing order:', error.message, '\nStack:', error.stack);
+        res.status(500).json({ success: false, message: 'Failed to process order: ' + error.message });
+    }
 });
 
 // Start server
